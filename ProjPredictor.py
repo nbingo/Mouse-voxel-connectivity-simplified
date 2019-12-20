@@ -26,7 +26,6 @@ class ProjPredictor:
     Methods
     -------
     save_projections(self, filename: str) -> None
-
     """
     def __init__(self,
                  manifest_file: str = 'voxel_model_manifest.json',
@@ -52,7 +51,21 @@ class ProjPredictor:
         self.projections: np.array = None
 
     def save_projections(self, filename: str) -> None:
-        io.imsave(filename, self.projections)
+        """Saves the projections with the given filename
+
+        If there is no currently saved projection image, nothing happens.
+
+        Parameters
+        ----------
+        filename : str
+            The filename to be given to the saved projection image. It should include the file type extension.
+
+        Returns
+        -------
+        Nothing
+        """
+        if self.projections is not None:
+            io.imsave(filename, self.projections)
 
     def set_image(self, image_file: str, y_mirror: bool = False) -> None:
         if self.verbose:
