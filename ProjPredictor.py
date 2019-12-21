@@ -37,18 +37,40 @@ class ProjPredictor:
         self.verbose = verbose
         if self.verbose:
             print('Loading Voxel Model Cache...')
-        self.cache = VoxelModelCache(manifest_file=manifest_file, ccf_version=ccf_version)
+        self._cache = VoxelModelCache(manifest_file=manifest_file, ccf_version=ccf_version)
         if self.verbose:
             print('Extracting voxel array, source mask, and target mask...')
-        self.voxel_array, self.source_mask, self.target_mask = self.cache.get_voxel_connectivity_array()
-        if image_file:
+        self._voxel_array, self._source_mask, self._target_mask = self._cache.get_voxel_connectivity_array()
+        if image_file is not None:
             if self.verbose:
                 print(f'Loading image "{image_file}"...')
             self.image: np.array = io.imread(image_file)
             self.permute_pad_reflect()
         else:
-            self.image: np.array = None
-        self.projections: np.array = None
+            self._image: np.array = None
+        self._projections: np.array = None
+
+    @property
+    def image(self) -> np.array:
+        return self._image
+
+    @image.setter
+    def image(self, image_file: Union[str, np.array]) -> None:
+        if isinstance(image_file, str):
+            self._image = io.imread(image_file)
+        elif isinstance(image_file, np.array):
+            self._image = image_file
+
+    @property
+    def projections(self) -> np.array:
+        return self._projections
+
+    @projections.setter
+    def projections(self, image_file: Union[str, np.array]) -> None:
+        if isinstance(image_file, str):
+            self._projections = io.imread(image_file)
+        elif isinstance(image_file, np.array):
+            self._projections = image_file
 
     def save_projections(self, filename: str) -> None:
         """Saves the projections with the given filename
@@ -83,10 +105,10 @@ class ProjPredictor:
             return napari.view_image(self.projections)
 
     def vol_to_probs(self, save: bool = True) -> np.array:
-        data_flattened = self.source_mask.mask_volume(self.image)
+        data_flattened = self._source_mask.mask_volume(self.image)
 
-        row = self.voxel_array[data_flattened == 1].mean(axis=0)
-        return_volume = self.target_mask.map_masked_to_annotation(row)
+        row = self._voxel_array[data_flattened == 1].mean(axis=0)
+        return_volume = self._target_mask.map_masked_to_annotation(row)
 
         if save:
             self.projections = return_volume
@@ -103,12 +125,12 @@ class ProjPredictor:
     def filter_by_id(self, structure_id: Union[int, List[int]]) -> None:
         if not isinstance(structure_id, list):
             structure_id = [structure_id]
-        mask = self.cache.get_reference_space().make_structure_mask(structure_id)
+        mask = self._cache.get_reference_space().make_structure_mask(structure_id)
         self.image = self.image * mask
 
     def filter_by_name(self, structure_name: Union[str, List[str]]) -> None:
         if not isinstance(structure_name, list):
             structure_name = [structure_name]
-        structures = self.cache.get_structure_tree().get_structures_by_name(structure_name)
+        structures = self._cache.get_structure_tree().get_structures_by_name(structure_name)
         ids = [structure['id'] for structure in structures]
         self.filter_by_id(ids)
