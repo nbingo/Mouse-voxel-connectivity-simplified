@@ -45,7 +45,6 @@ class ProjPredictor:
             if self.verbose:
                 print(f'Loading image "{image_file}"...')
             self.image: np.array = io.imread(image_file)
-            self.permute_pad_reflect()
         else:
             self._image: np.array = None
         self._projections: np.array = None
@@ -60,6 +59,7 @@ class ProjPredictor:
             self._image = io.imread(image_file)
         elif isinstance(image_file, np.array):
             self._image = image_file
+        self.permute_pad_reflect()
 
     @property
     def projections(self) -> np.array:
@@ -94,17 +94,41 @@ class ProjPredictor:
             print(f'Loading image "{image_file}"')
         self.image = io.imread(image_file)
         self.y_mirror = y_mirror
-        self.permute_pad_reflect()
 
     def view_source(self) -> napari.Viewer:
+        """Brings up a napari viewer of the source image.
+
+        Returns
+        -------
+        napari viewer with the source image."""
         with napari.gui_qt():
             return napari.view_image(self.image)
 
     def view_proj(self) -> napari.Viewer:
-        with napari.gui_qt():
-            return napari.view_image(self.projections)
+        """Brings up a napari viewer of the projection image, if there is one.
+
+        Returns
+        -------
+        napari viewer with the projection image."""
+        if self.projections is not None:
+            with napari.gui_qt():
+                return napari.view_image(self.projections)
 
     def vol_to_probs(self, save: bool = True) -> np.array:
+        """Takes the inner source image and computes the projections from each source voxel.
+
+        The source image must be a binary, {0,1}, image. The projections of each voxel are calculated
+        and then averaged at the end. If desired, this resulting projections image can be saved.
+
+        Parameters
+        ----------
+        save : bool
+            Whether to save the resulting projections image.
+
+        Returns
+        -------
+        The resulting projection image, which has the same dimensionality as the source image.
+        """
         data_flattened = self._source_mask.mask_volume(self.image)
 
         row = self._voxel_array[data_flattened == 1].mean(axis=0)
@@ -116,6 +140,10 @@ class ProjPredictor:
         return return_volume
 
     def permute_pad_reflect(self) -> None:
+        """Permutes, pads, and reflects the stored image to match it to the 100um annotation.
+
+        Currently has hard coded numbers.
+        """
         self.image = np.transpose(self.image, (1, 0, 2))
         self.image = np.pad(self.image, ((0, 132 - 88), (80 - 65 - 10, 10), (13, 114 - 88 - 13)), 'constant')
         self.image = np.flip(self.image, axis=(0, 1))
@@ -123,12 +151,29 @@ class ProjPredictor:
             self.image = np.fliplr(self.image)
 
     def filter_by_id(self, structure_id: Union[int, List[int]]) -> None:
+        """Given an id or a list of ids, only preserves voxels from the original image that are included
+        in at least one of the given structures.
+
+        Parameters
+        ----------
+        structure_id : Union[int, List[int]]
+            A single id or a list of ids (which will be unioned together) to mask the stored image.
+        """
         if not isinstance(structure_id, list):
             structure_id = [structure_id]
         mask = self._cache.get_reference_space().make_structure_mask(structure_id)
         self.image = self.image * mask
 
     def filter_by_name(self, structure_name: Union[str, List[str]]) -> None:
+        """Given a structure name or a list of structure names, only preserves voxels from the original image
+        that are included in at least one of the given structures.
+
+        Parameters
+        ----------
+        structure_name : Union[str, List[str]]
+            A single structure name or list of structure names (which will be unioned together)
+            to mask the stored image.
+        """
         if not isinstance(structure_name, list):
             structure_name = [structure_name]
         structures = self._cache.get_structure_tree().get_structures_by_name(structure_name)
