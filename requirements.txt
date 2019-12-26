@@ -1,0 +1,7 @@
+allensdk
+mcmodels
+numpy
+typing
+scikit-image
+napari
+seaborn

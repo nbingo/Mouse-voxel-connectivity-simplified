@@ -4,6 +4,7 @@ import numpy as np
 from typing import Union, List
 from skimage import io
 import napari
+import pickle
 
 
 class ProjPredictor:
@@ -129,6 +130,8 @@ class ProjPredictor:
         -------
         The resulting projection image, which has the same dimensionality as the source image.
         """
+        if self.verbose:
+            print('Converting source image to projection probabilities...')
         data_flattened = self._source_mask.mask_volume(self.image)
 
         row = self._voxel_array[data_flattened == 1].mean(axis=0)
@@ -144,6 +147,8 @@ class ProjPredictor:
 
         Currently has hard coded numbers.
         """
+        if self.verbose:
+            print('Permuting, padding, and reflecting source image...')
         self.image = np.transpose(self.image, (1, 0, 2))
         self.image = np.pad(self.image, ((0, 132 - 88), (80 - 65 - 10, 10), (13, 114 - 88 - 13)), 'constant')
         self.image = np.flip(self.image, axis=(0, 1))
@@ -159,10 +164,16 @@ class ProjPredictor:
         structure_id : Union[int, List[int]]
             A single id or a list of ids (which will be unioned together) to mask the stored image.
         """
+        if self.verbose:
+            print('Filtering source image by selected structures...')
+        mask = self.struct_ids_to_mask(structure_id)
+        self.image = self.image * mask
+
+    def struct_ids_to_mask(self, structure_id):
         if not isinstance(structure_id, list):
             structure_id = [structure_id]
         mask = self._cache.get_reference_space().make_structure_mask(structure_id)
-        self.image = self.image * mask
+        return mask
 
     def filter_by_name(self, structure_name: Union[str, List[str]]) -> None:
         """Given a structure name or a list of structure names, only preserves voxels from the original image
@@ -174,8 +185,23 @@ class ProjPredictor:
             A single structure name or list of structure names (which will be unioned together)
             to mask the stored image.
         """
+        ids = self.struct_names_to_ids(structure_name)
+        self.filter_by_id(ids)
+
+    def struct_names_to_ids(self, structure_name):
         if not isinstance(structure_name, list):
             structure_name = [structure_name]
         structures = self._cache.get_structure_tree().get_structures_by_name(structure_name)
         ids = [structure['id'] for structure in structures]
-        self.filter_by_id(ids)
+        return ids
+
+    def save_proj_by_area(self, structure_name: Union[str, List[str]], fname: str = 'proj_by_area') -> None:
+        if self.verbose:
+            print(f'Saving projections by area to: {fname}')
+        ids = self.struct_names_to_ids(structure_name)
+        if not self.projections:    # if we haven't computed the projections yet
+            self.vol_to_probs()
+        proj_dict = {}
+        for name, id in zip(structure_name, ids):
+            proj_dict[name] = (self.struct_ids_to_mask(id) * self.projections).sum()
+        pickle.dump(proj_dict, fname)
