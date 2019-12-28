@@ -101,7 +101,7 @@ class ProjPredictor:
 
         Returns
         -------
-        Nothing
+        None
         """
         if self.projections is not None:
             io.imsave(filename, self.projections)
@@ -214,6 +214,22 @@ class ProjPredictor:
         return ids
 
     def save_proj_by_area(self, structure_name: Union[str, List[str]], fname: str = 'proj_by_area') -> None:
+        """
+        Saves a Pandas array that contains the source area, target area, and summed projection strength from
+        the source area to the target area. It will have as many rows as target areas, or one if structure_name
+        is just a string and not a list.
+
+        Parameters
+        ----------
+        structure_name : Union[str, List[str]]
+            A string or list of strings denoting the target areas to filter and save by.
+        fname : str
+            The file name of the file to be saved.
+
+        Returns
+        -------
+        None
+        """
         if self.verbose:
             print(f'Saving projections by area to: {fname}')
         ids = self.struct_names_to_ids(structure_name)
