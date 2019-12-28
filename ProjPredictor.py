@@ -32,6 +32,7 @@ class ProjPredictor:
                  manifest_file: str = 'voxel_model_manifest.json',
                  ccf_version: str = MouseConnectivityApi.CCF_VERSION_DEFAULT,
                  image_file: str = None,
+                 source_area: str = '',
                  y_mirror: bool = False,
                  verbose: bool = False) -> None:
         self.y_mirror = y_mirror
@@ -49,6 +50,19 @@ class ProjPredictor:
         else:
             self._image: np.array = None
         self._projections: np.array = None
+        self.source_area: str = source_area
+
+    @property
+    def source_area(self) -> str:
+        return self._source_area
+
+    @source_area.setter
+    def source_area(self, struct_name: str) -> None:
+        if not isinstance(struct_name, str):
+            raise TypeError('Source area must be a string of the FULL name (not acronym) of the source area.')
+        if struct_name not in self._cache.get_structure_tree().get_name_map().values():
+            raise ValueError('Source area name cannot be found in the structure tree.')
+        self._source_area = struct_name
 
     @property
     def image(self) -> np.array:
@@ -90,11 +104,13 @@ class ProjPredictor:
         if self.projections is not None:
             io.imsave(filename, self.projections)
 
-    def set_image_from_file(self, image_file: str, y_mirror: bool = False) -> None:
+    def set_image_from_file(self, image_file: str, y_mirror: bool = False, source_area: str = None) -> None:
         if self.verbose:
             print(f'Loading image "{image_file}"')
         self.image = io.imread(image_file)
         self.y_mirror = y_mirror
+        if source_area is not None:
+            self.source_area = source_area
 
     def view_source(self) -> napari.Viewer:
         """Brings up a napari viewer of the source image.
@@ -201,8 +217,11 @@ class ProjPredictor:
         ids = self.struct_names_to_ids(structure_name)
         if self.projections is None:    # if we haven't computed the projections yet
             self.vol_to_probs()
-        proj_dict = {fname: [(self.struct_ids_to_mask(i) * self.projections).sum() for i in ids]}
+        proj_dict = {}
         if not isinstance(structure_name, list):
             structure_name = [structure_name]
-        df = pd.DataFrame(proj_dict, index=[name for name in structure_name])
+        for name, i in zip(structure_name, ids):
+            proj_dict[name] = (self.struct_ids_to_mask(i) * self.projections).sum()
+        proj_dict['Source area'] = self.source_area
+        df = pd.DataFrame(proj_dict, index=[0])
         pd.to_pickle(df, fname)
