@@ -5,6 +5,7 @@ from typing import Union, List
 from skimage import io
 import napari
 import pandas as pd
+import warnings
 
 
 class ProjPredictor:
@@ -59,9 +60,10 @@ class ProjPredictor:
     @source_area.setter
     def source_area(self, struct_name: str) -> None:
         if not isinstance(struct_name, str):
-            raise TypeError('Source area must be a string of the FULL name (not acronym) of the source area.')
+            warnings.warn('Source area must be a string of the FULL name (not acronym) of the source area.',
+                          UserWarning)
         if struct_name not in self._cache.get_structure_tree().get_name_map().values():
-            raise ValueError('Source area name cannot be found in the structure tree.')
+            warnings.warn('Source area name (not acronym) cannot be found in the structure tree.', UserWarning)
         self._source_area = struct_name
 
     @property
