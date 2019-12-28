@@ -1,1 +1,7 @@
 .idea/*
+__pycache__/*
+voxel_model_manifest.json
+voxel_model/*
+structures.json
+annotation/*
+.ipynb_checkpoints/*

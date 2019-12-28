@@ -4,7 +4,7 @@ import numpy as np
 from typing import Union, List
 from skimage import io
 import napari
-import pickle
+import pandas as pd
 
 
 class ProjPredictor:
@@ -58,9 +58,9 @@ class ProjPredictor:
     def image(self, image_file: Union[str, np.array]) -> None:
         if isinstance(image_file, str):
             self._image = io.imread(image_file)
-        elif isinstance(image_file, np.array):
+        else:
             self._image = image_file
-        self.permute_pad_reflect()
+        self._permute_pad_reflect()
 
     @property
     def projections(self) -> np.array:
@@ -70,7 +70,7 @@ class ProjPredictor:
     def projections(self, image_file: Union[str, np.array]) -> None:
         if isinstance(image_file, str):
             self._projections = io.imread(image_file)
-        elif isinstance(image_file, np.array):
+        else:
             self._projections = image_file
 
     def save_projections(self, filename: str) -> None:
@@ -90,7 +90,7 @@ class ProjPredictor:
         if self.projections is not None:
             io.imsave(filename, self.projections)
 
-    def set_image(self, image_file: str, y_mirror: bool = False) -> None:
+    def set_image_from_file(self, image_file: str, y_mirror: bool = False) -> None:
         if self.verbose:
             print(f'Loading image "{image_file}"')
         self.image = io.imread(image_file)
@@ -142,18 +142,18 @@ class ProjPredictor:
 
         return return_volume
 
-    def permute_pad_reflect(self) -> None:
+    def _permute_pad_reflect(self) -> None:
         """Permutes, pads, and reflects the stored image to match it to the 100um annotation.
 
-        Currently has hard coded numbers.
+        Used internally when the image is set. Currently has hard coded numbers.
         """
         if self.verbose:
             print('Permuting, padding, and reflecting source image...')
-        self.image = np.transpose(self.image, (1, 0, 2))
-        self.image = np.pad(self.image, ((0, 132 - 88), (80 - 65 - 10, 10), (13, 114 - 88 - 13)), 'constant')
-        self.image = np.flip(self.image, axis=(0, 1))
+        self._image = np.transpose(self._image, (1, 0, 2))
+        self._image = np.pad(self._image, ((0, 132 - 88), (80 - 65 - 10, 10), (13, 114 - 88 - 13)), 'constant')
+        self._image = np.flip(self._image, axis=(0, 1))
         if self.y_mirror:
-            self.image = np.fliplr(self.image)
+            self._image = np.fliplr(self._image)
 
     def filter_by_id(self, structure_id: Union[int, List[int]]) -> None:
         """Given an id or a list of ids, only preserves voxels from the original image that are included
@@ -167,7 +167,7 @@ class ProjPredictor:
         if self.verbose:
             print('Filtering source image by selected structures...')
         mask = self.struct_ids_to_mask(structure_id)
-        self.image = self.image * mask
+        self._image = self._image * mask
 
     def struct_ids_to_mask(self, structure_id):
         if not isinstance(structure_id, list):
@@ -199,9 +199,10 @@ class ProjPredictor:
         if self.verbose:
             print(f'Saving projections by area to: {fname}')
         ids = self.struct_names_to_ids(structure_name)
-        if not self.projections:    # if we haven't computed the projections yet
+        if self.projections is None:    # if we haven't computed the projections yet
             self.vol_to_probs()
-        proj_dict = {}
-        for name, id in zip(structure_name, ids):
-            proj_dict[name] = (self.struct_ids_to_mask(id) * self.projections).sum()
-        pickle.dump(proj_dict, fname)
+        proj_dict = {fname: [(self.struct_ids_to_mask(i) * self.projections).sum() for i in ids]}
+        if not isinstance(structure_name, list):
+            structure_name = [structure_name]
+        df = pd.DataFrame(proj_dict, index=[name for name in structure_name])
+        pd.to_pickle(df, fname)

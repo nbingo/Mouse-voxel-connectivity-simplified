@@ -4,4 +4,4 @@ numpy
 typing
 scikit-image
 napari
-seaborn
+pandas
