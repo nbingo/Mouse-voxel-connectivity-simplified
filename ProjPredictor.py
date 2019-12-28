@@ -59,12 +59,18 @@ class ProjPredictor:
 
     @source_area.setter
     def source_area(self, struct_name: str) -> None:
-        if not isinstance(struct_name, str):
+        self.assert_valid_structure_name(struct_name)
+        self._source_area = struct_name
+
+    def assert_valid_structure_name(self, struct_name: Union[str, List[str]]):
+        if not isinstance(struct_name, list):
+            struct_name = [struct_name]
+        if not np.array([isinstance(name, str) for name in struct_name]).all():
             warnings.warn('Source area must be a string of the FULL name (not acronym) of the source area.',
                           UserWarning)
-        if struct_name not in self._cache.get_structure_tree().get_name_map().values():
+        names = self._cache.get_structure_tree().get_name_map().values()
+        if np.array([name not in names for name in struct_name]).any():
             warnings.warn('Source area name (not acronym) cannot be found in the structure tree.', UserWarning)
-        self._source_area = struct_name
 
     @property
     def image(self) -> np.array:
@@ -232,6 +238,7 @@ class ProjPredictor:
         """
         if self.verbose:
             print(f'Saving projections by area to: {fname}')
+        self.assert_valid_structure_name(structure_name)
         ids = self.struct_names_to_ids(structure_name)
         if self.projections is None:    # if we haven't computed the projections yet
             self.vol_to_probs()
