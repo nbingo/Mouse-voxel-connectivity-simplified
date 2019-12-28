@@ -235,11 +235,10 @@ class ProjPredictor:
         ids = self.struct_names_to_ids(structure_name)
         if self.projections is None:    # if we haven't computed the projections yet
             self.vol_to_probs()
-        proj_dict = {}
         if not isinstance(structure_name, list):
             structure_name = [structure_name]
-        for name, i in zip(structure_name, ids):
-            proj_dict[name] = (self.struct_ids_to_mask(i) * self.projections).sum()
-        proj_dict['Source area'] = self.source_area
-        df = pd.DataFrame(proj_dict, index=[0])
+        proj_dict = {'Source area': [self.source_area] * len(structure_name),
+                     'Target area': structure_name,
+                     'Projection strength': [(self.struct_ids_to_mask(i) * self.projections).sum() for i in ids]}
+        df = pd.DataFrame(proj_dict)
         pd.to_pickle(df, fname)
