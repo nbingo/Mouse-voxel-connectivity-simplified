@@ -86,6 +86,8 @@ class ProjPredictor:
 
     @property
     def projections(self) -> np.array:
+        if self._projections is None:
+            self.vol_to_probs()
         return self._projections
 
     @projections.setter
@@ -98,7 +100,8 @@ class ProjPredictor:
     def save_projections(self, filename: str) -> None:
         """Saves the projections with the given filename
 
-        If there is no currently saved projection image, nothing happens.
+        If there is no currently saved projection image, then an attempt is made to compute the projections
+        assuming that an image has been given.
 
         Parameters
         ----------
@@ -109,8 +112,7 @@ class ProjPredictor:
         -------
         None
         """
-        if self.projections is not None:
-            io.imsave(filename, self.projections)
+        io.imsave(filename, self.projections)
 
     def set_image_from_file(self, image_file: str, y_mirror: bool = False, source_area: str = None) -> None:
         if self.verbose:
@@ -130,14 +132,14 @@ class ProjPredictor:
             return napari.view_image(self.image)
 
     def view_proj(self) -> napari.Viewer:
-        """Brings up a napari viewer of the projection image, if there is one.
+        """Brings up a napari viewer of the projection image. If there is not one, then
+        the projections are calculated.
 
         Returns
         -------
         napari viewer with the projection image."""
-        if self.projections is not None:
-            with napari.gui_qt():
-                return napari.view_image(self.projections)
+        with napari.gui_qt():
+            return napari.view_image(self.projections)
 
     def vol_to_probs(self, save: bool = True) -> np.array:
         """Takes the inner source image and computes the projections from each source voxel.
@@ -240,8 +242,6 @@ class ProjPredictor:
             print(f'Saving projections by area to: {fname}')
         self.assert_valid_structure_name(structure_name)
         ids = self.struct_names_to_ids(structure_name)
-        if self.projections is None:    # if we haven't computed the projections yet
-            self.vol_to_probs()
         if not isinstance(structure_name, list):
             structure_name = [structure_name]
         proj_dict = {'Source area': [self.source_area] * len(structure_name),
