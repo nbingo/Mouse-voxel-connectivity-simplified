@@ -20,6 +20,8 @@ class ProjPredictor:
         A formatted string representing the version of allensdk data to use
     image_file : str
         A filename pointing to an image to read in
+    source_area : str
+        The name of the area from which the original projection data was gathered.
     y_mirror : bool
         A boolean representing whether the image should be mirrored along the median plane
     verbose : bool
@@ -36,6 +38,23 @@ class ProjPredictor:
                  source_area: str = '',
                  y_mirror: bool = False,
                  verbose: bool = False) -> None:
+        """
+
+        Parameters
+        ----------
+        manifest_file : str
+            A string representing the manifest to read from for the voxel model cache
+        ccf_version : str
+            A formatted string representing the version of allensdk data to use
+        image_file : str
+            A filename pointing to an image to read in
+        source_area : str
+            The name of the area from which the original projection data was gathered.
+        y_mirror : bool
+            A boolean representing whether the image should be mirrored along the median plane
+        verbose : bool
+            A boolean representing whether verbose debugging messages should be printed
+        """
         self.y_mirror = y_mirror
         self.verbose = verbose
         if self.verbose:
