@@ -1,6 +1,8 @@
 from ProjPredictor import ProjPredictor
 
-pp = ProjPredictor(image_file='dentate_signal_aligned_100um_binarized.tif', source_area='Dentate nucleus', verbose=True)
+pp = ProjPredictor(image_file='dentate_signal_aligned_100um_binarized.tif',
+                   source_area='Dentate nucleus',
+                   verbose=True)
 pp.filter_by_name('Thalamus')
 pp.vol_to_probs()
 # pp.view_proj()

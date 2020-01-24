@@ -1,8 +1,9 @@
 from mcmodels.core import VoxelModelCache
 from allensdk.api.queries.mouse_connectivity_api import MouseConnectivityApi
 import numpy as np
-from typing import Union, List
+from typing import Union, List, Tuple
 from skimage import io
+from skimage.transform import resize
 import napari
 import pandas as pd
 import warnings
@@ -14,6 +15,9 @@ class ProjPredictor:
 
     Attributes
     ----------
+    load_cache : bool
+        Whether the cache should be loaded or not. For example, the cache isn't needed if projections have
+        already been calculated.
     manifest_file : str
         A string representing the manifest to read from for the voxel model cache
     ccf_version : str
@@ -32,6 +36,7 @@ class ProjPredictor:
     save_projections(self, filename: str) -> None
     """
     def __init__(self,
+                 load_cache: bool = True,
                  manifest_file: str = 'voxel_model_manifest.json',
                  ccf_version: str = MouseConnectivityApi.CCF_VERSION_DEFAULT,
                  image_file: str = None,
@@ -42,6 +47,9 @@ class ProjPredictor:
 
         Parameters
         ----------
+        load_cache : bool
+            Whether the cache should be loaded or not. For example, the cache isn't needed if projections have
+            already been calculated.
         manifest_file : str
             A string representing the manifest to read from for the voxel model cache
         ccf_version : str
@@ -57,12 +65,13 @@ class ProjPredictor:
         """
         self.y_mirror = y_mirror
         self.verbose = verbose
-        if self.verbose:
-            print('Loading Voxel Model Cache...')
-        self._cache = VoxelModelCache(manifest_file=manifest_file, ccf_version=ccf_version)
-        if self.verbose:
-            print('Extracting voxel array, source mask, and target mask...')
-        self._voxel_array, self._source_mask, self._target_mask = self._cache.get_voxel_connectivity_array()
+        if load_cache:
+            if self.verbose:
+                print('Loading Voxel Model Cache...')
+            self._cache = VoxelModelCache(manifest_file=manifest_file, ccf_version=ccf_version)
+            if self.verbose:
+                print('Extracting voxel array, source mask, and target mask...')
+            self._voxel_array, self._source_mask, self._target_mask = self._cache.get_voxel_connectivity_array()
         if image_file is not None:
             if self.verbose:
                 print(f'Loading image "{image_file}"...')
@@ -71,6 +80,7 @@ class ProjPredictor:
             self._image: np.array = None
         self._projections: np.array = None
         self.source_area: str = source_area
+        self.default_shape = (65, 88, 88)
 
     @property
     def source_area(self) -> str:
@@ -133,10 +143,15 @@ class ProjPredictor:
         """
         io.imsave(filename, self.projections)
 
-    def set_image_from_file(self, image_file: str, y_mirror: bool = False, source_area: str = None) -> None:
+    def set_image_from_file(self, image_file: str,
+                            y_mirror: bool = False,
+                            source_area: str = None,
+                            reshape: bool = False) -> None:
         if self.verbose:
             print(f'Loading image "{image_file}"')
         self.image = io.imread(image_file)
+        if reshape:
+            self.image = resize(self.image, self.default_shape)
         self.y_mirror = y_mirror
         if source_area is not None:
             self.source_area = source_area
@@ -159,6 +174,9 @@ class ProjPredictor:
         napari viewer with the projection image."""
         with napari.gui_qt():
             return napari.view_image(self.projections)
+
+    def threshold(self, thresh: float) -> None:
+        self._image = self.image > thresh
 
     def vol_to_probs(self, save: bool = True) -> np.array:
         """Takes the inner source image and computes the projections from each source voxel.
@@ -265,6 +283,7 @@ class ProjPredictor:
             structure_name = [structure_name]
         proj_dict = {'Source area': [self.source_area] * len(structure_name),
                      'Target area': structure_name,
-                     'Projection strength': [(self.struct_ids_to_mask(i) * self.projections).sum() for i in ids]}
+                     'Projection strength': [(self.struct_ids_to_mask(i) * self.projections).sum() /
+                                             self.struct_ids_to_mask(i).sum() for i in ids]}
         df = pd.DataFrame(proj_dict)
         pd.to_pickle(df, fname)
