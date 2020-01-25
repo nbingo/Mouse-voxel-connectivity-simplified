@@ -165,7 +165,7 @@ class ProjPredictor:
         else:
             float_type = np.float32
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore::UserWarning')
+            warnings.simplefilter('ignore', UserWarning)
             io.imsave(filename, self.projections.astype(float_type))
 
     def set_image_from_file(self, image_file: str,
@@ -358,6 +358,6 @@ class ProjPredictor:
                      'Normalized by target': [normalize_target] * num_target_structs
                      }
         if self.filter_area is not None:
-            proj_dict['Filter area'] = [list(self.filter_area)] * num_target_structs
+            proj_dict['Filter area'] = [self.filter_area] * num_target_structs
         df = pd.DataFrame(proj_dict)
         pd.to_pickle(df, fname)

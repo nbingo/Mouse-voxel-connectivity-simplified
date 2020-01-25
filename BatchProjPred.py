@@ -26,4 +26,16 @@ for nucleus in nuclei:
         pp.save_proj_by_area(structure_name=areas,
                              normalize_source=True,
                              normalize_target=True,
-                             fname=f'proj_by_area/{nucleus[0]}{brain[-3:]}_filter-{area_filter}_proj_by_area.pickle')
+                             fname=f'proj_by_area/{nucleus[0]}{brain[-3:]}_filter-{area_filter}_both-norm_proj_by_area.pickle')
+        pp.save_proj_by_area(structure_name=areas,
+                             normalize_source=False,
+                             normalize_target=True,
+                             fname=f'proj_by_area/{nucleus[0]}{brain[-3:]}_filter-{area_filter}_target-norm_proj_by_area.pickle')
+        pp.save_proj_by_area(structure_name=areas,
+                             normalize_source=True,
+                             normalize_target=False,
+                             fname=f'proj_by_area/{nucleus[0]}{brain[-3:]}_filter-{area_filter}_source-norm_proj_by_area.pickle')
+        pp.save_proj_by_area(structure_name=areas,
+                             normalize_source=False,
+                             normalize_target=False,
+                             fname=f'proj_by_area/{nucleus[0]}{brain[-3:]}_filter-{area_filter}_no-norm_proj_by_area.pickle')
