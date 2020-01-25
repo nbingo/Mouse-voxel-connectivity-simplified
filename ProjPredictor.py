@@ -1,7 +1,7 @@
 from mcmodels.core import VoxelModelCache
 from allensdk.api.queries.mouse_connectivity_api import MouseConnectivityApi
 import numpy as np
-from typing import Union, List, Tuple
+from typing import Union, List
 from skimage import io
 from skimage.transform import resize
 import napari
@@ -40,7 +40,8 @@ class ProjPredictor:
                  manifest_file: str = 'voxel_model_manifest.json',
                  ccf_version: str = MouseConnectivityApi.CCF_VERSION_DEFAULT,
                  image_file: str = None,
-                 source_area: str = '',
+                 source_area: str = None,
+                 filter_area: Union[str, List[str]] = None,
                  y_mirror: bool = False,
                  verbose: bool = False) -> None:
         """
@@ -58,6 +59,8 @@ class ProjPredictor:
             A filename pointing to an image to read in
         source_area : str
             The name of the area from which the original projection data was gathered.
+        filter_area : Union[str, List[str], int, List[int]]
+            Area(s) by which to filter the source voxels before getting their projections. Only give names.
         y_mirror : bool
             A boolean representing whether the image should be mirrored along the median plane
         verbose : bool
@@ -79,7 +82,10 @@ class ProjPredictor:
         else:
             self._image: np.array = None
         self._projections: np.array = None
-        self.source_area: str = source_area
+        if source_area is not None:
+            self.source_area: str = source_area
+        if filter_area is not None:
+            self.filter_area = filter_area
         self.default_shape = (65, 88, 88)
 
     @property
@@ -90,6 +96,15 @@ class ProjPredictor:
     def source_area(self, struct_name: str) -> None:
         self.assert_valid_structure_name(struct_name)
         self._source_area = struct_name
+
+    @property
+    def filter_area(self) -> Union[str, List[str]]:
+        return self._filter_area
+
+    @filter_area.setter
+    def filter_area(self, struct_name: Union[str, List[str]]) -> None:
+        self.assert_valid_structure_name(struct_name)
+        self._filter_area = struct_name
 
     def assert_valid_structure_name(self, struct_name: Union[str, List[str]]):
         if not isinstance(struct_name, list):
@@ -126,7 +141,7 @@ class ProjPredictor:
         else:
             self._projections = image_file
 
-    def save_projections(self, filename: str) -> None:
+    def save_projections(self, filename: str, bits: int = 32) -> None:
         """Saves the projections with the given filename
 
         If there is no currently saved projection image, then an attempt is made to compute the projections
@@ -136,23 +151,34 @@ class ProjPredictor:
         ----------
         filename : str
             The filename to be given to the saved projection image. It should include the file type extension.
+        bits : int
+            The number of bits to save the tiff file as. Choose from: 16, 32, 64
 
         Returns
         -------
         None
         """
-        io.imsave(filename, self.projections)
+        if bits == 16:
+            float_type = np.float16
+        elif bits == 64:
+            float_type = np.float64
+        else:
+            float_type = np.float32
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore::UserWarning')
+            io.imsave(filename, self.projections.astype(float_type))
 
     def set_image_from_file(self, image_file: str,
                             y_mirror: bool = False,
                             source_area: str = None,
                             reshape: bool = False) -> None:
+        self.y_mirror = y_mirror
         if self.verbose:
             print(f'Loading image "{image_file}"')
-        self.image = io.imread(image_file)
+        im = io.imread(image_file)
         if reshape:
-            self.image = resize(self.image, self.default_shape)
-        self.y_mirror = y_mirror
+            im = resize(im, self.default_shape)
+        self.image = im
         if source_area is not None:
             self.source_area = source_area
 
@@ -182,7 +208,7 @@ class ProjPredictor:
         """Takes the inner source image and computes the projections from each source voxel.
 
         The source image must be a binary, {0,1}, image. The projections of each voxel are calculated
-        and then averaged at the end. If desired, this resulting projections image can be saved.
+        and then summed at the end. If desired, this resulting projections image can be saved.
 
         Parameters
         ----------
@@ -197,7 +223,7 @@ class ProjPredictor:
             print('Converting source image to projection probabilities...')
         data_flattened = self._source_mask.mask_volume(self.image)
 
-        row = self._voxel_array[data_flattened == 1].mean(axis=0)
+        row = self._voxel_array[data_flattened == 1].sum(axis=0)
         return_volume = self._target_mask.map_masked_to_annotation(row)
 
         if save:
@@ -218,7 +244,7 @@ class ProjPredictor:
         if self.y_mirror:
             self._image = np.fliplr(self._image)
 
-    def filter_by_id(self, structure_id: Union[int, List[int]]) -> None:
+    def _filter_by_id(self, structure_id: Union[int, List[int]]) -> None:
         """Given an id or a list of ids, only preserves voxels from the original image that are included
         in at least one of the given structures.
 
@@ -232,7 +258,20 @@ class ProjPredictor:
         mask = self.struct_ids_to_mask(structure_id)
         self._image = self._image * mask
 
-    def struct_ids_to_mask(self, structure_id):
+    def struct_ids_to_mask(self, structure_id: Union[int, List[int]]) -> np.array:
+        """
+        Takes in structure ids or id and creates a mask for those structures. If multiple structures,
+        then the resulting mask will be a union of masks.
+
+        Parameters
+        ----------
+        structure_id : Union[int, List[int]]
+            A single id or a list of ids (which will be unioned together) to mask the stored image.
+
+        Returns
+        -------
+        Binary array with a 1 where at least one of the given structures is present.
+        """
         if not isinstance(structure_id, list):
             structure_id = [structure_id]
         mask = self._cache.get_reference_space().make_structure_mask(structure_id)
@@ -248,17 +287,34 @@ class ProjPredictor:
             A single structure name or list of structure names (which will be unioned together)
             to mask the stored image.
         """
+        self.filter_area = structure_name
         ids = self.struct_names_to_ids(structure_name)
-        self.filter_by_id(ids)
+        self._filter_by_id(ids)
 
-    def struct_names_to_ids(self, structure_name):
+    def struct_names_to_ids(self, structure_name: Union[str, List[str]]) -> List[int]:
+        """
+        Takes in structure name(s) and returns their id(s).
+
+        Parameters
+        ----------
+        structure_name : Union[str, List[str]]
+            Single name or list of names of desired structures
+
+        Returns
+        -------
+        List of ints with each id in the same order as the structures were given.
+        """
         if not isinstance(structure_name, list):
             structure_name = [structure_name]
         structures = self._cache.get_structure_tree().get_structures_by_name(structure_name)
         ids = [structure['id'] for structure in structures]
         return ids
 
-    def save_proj_by_area(self, structure_name: Union[str, List[str]], fname: str = 'proj_by_area') -> None:
+    def save_proj_by_area(self,
+                          structure_name: Union[str, List[str]],
+                          normalize_source: bool = False,
+                          normalize_target: bool = False,
+                          fname: str = 'proj_by_area') -> None:
         """
         Saves a Pandas array that contains the source area, target area, and summed projection strength from
         the source area to the target area. It will have as many rows as target areas, or one if structure_name
@@ -268,6 +324,10 @@ class ProjPredictor:
         ----------
         structure_name : Union[str, List[str]]
             A string or list of strings denoting the target areas to filter and save by.
+        normalize_source : bool
+            Boolean indicating whether to normalize by the number of source voxels used.
+        normalize_target : bool
+            Boolean indicating whether to normalize by the target area (to get density of projections).
         fname : str
             The file name of the file to be saved.
 
@@ -281,9 +341,23 @@ class ProjPredictor:
         ids = self.struct_names_to_ids(structure_name)
         if not isinstance(structure_name, list):
             structure_name = [structure_name]
-        proj_dict = {'Source area': [self.source_area] * len(structure_name),
+        if normalize_target:
+            proj_strengths = [(self.struct_ids_to_mask(i) * self.projections).sum() /
+                              self.struct_ids_to_mask(i).sum() for i in ids]
+        else:
+            proj_strengths = [(self.struct_ids_to_mask(i) * self.projections).sum() for i in ids]
+        proj_strengths = np.array(proj_strengths)
+        source_area_voxels = self.image.sum()
+        if normalize_source:
+            proj_strengths = proj_strengths / source_area_voxels
+        num_target_structs = len(structure_name)
+        proj_dict = {'Source area': [self.source_area] * num_target_structs,
                      'Target area': structure_name,
-                     'Projection strength': [(self.struct_ids_to_mask(i) * self.projections).sum() /
-                                             self.struct_ids_to_mask(i).sum() for i in ids]}
+                     'Projection strength': proj_strengths,
+                     'Normalized by source': [normalize_source] * num_target_structs,
+                     'Normalized by target': [normalize_target] * num_target_structs
+                     }
+        if self.filter_area is not None:
+            proj_dict['Filter area'] = [list(self.filter_area)] * num_target_structs
         df = pd.DataFrame(proj_dict)
         pd.to_pickle(df, fname)
