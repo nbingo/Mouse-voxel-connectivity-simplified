@@ -86,6 +86,8 @@ class ProjPredictor:
             self.source_area: str = source_area
         if filter_area is not None:
             self.filter_area = filter_area
+        else:
+            self._filter_area = None
         self.default_shape = (65, 88, 88)
 
     @property
@@ -224,6 +226,7 @@ class ProjPredictor:
         data_flattened = self._source_mask.mask_volume(self.image)
 
         row = self._voxel_array[data_flattened == 1].sum(axis=0)
+        np.nan_to_num(row, copy=False, nan=0.0)
         return_volume = self._target_mask.map_masked_to_annotation(row)
 
         if save:
